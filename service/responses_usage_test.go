@@ -276,17 +276,31 @@ func TestResponsesUsageAccumulatorMissingUsageEstimation(t *testing.T) {
 			wantCompletion: tokenkit.Count(model, summary+arguments),
 		},
 		{
-			name: "created only then disconnect bills the prompt",
+			name: "created only then disconnect bills nothing",
 			events: []dto.ResponsesStreamResponse{
 				{Type: "response.created", Response: inProgress},
+			},
+		},
+		{
+			name: "incomplete without usage or output bills nothing",
+			events: []dto.ResponsesStreamResponse{
+				{Type: "response.created", Response: inProgress},
+				{Type: "response.incomplete", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"incomplete"`)}},
+			},
+		},
+		{
+			name: "image delivered before disconnect bills the prompt",
+			events: []dto.ResponsesStreamResponse{
+				{Type: "response.created", Response: inProgress},
+				{Type: dto.ResponsesOutputTypeItemDone, Item: &dto.ResponsesOutput{ID: "img_1", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "completed", Result: "image-data"}},
 			},
 			wantPrompt: 100,
 		},
 		{
-			name: "incomplete without usage bills the prompt",
+			name: "completed without usage or output bills the prompt",
 			events: []dto.ResponsesStreamResponse{
 				{Type: "response.created", Response: inProgress},
-				{Type: "response.incomplete", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"incomplete"`)}},
+				{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`)}},
 			},
 			wantPrompt: 100,
 		},

@@ -183,7 +183,15 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	if !containStreamUsage {
-		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+		// Without upstream usage the estimated prompt is charged only when the
+		// stream delivered output or completed; a stream cut before any output
+		// is not charged.
+		promptTokens := info.GetEstimatePromptTokens()
+		if responseTextBuilder.Len() == 0 && toolCount == 0 &&
+			info.StreamStatus.ResponseOutcome() != string(relaycommon.ResponseOutcomeCompleted) {
+			promptTokens = 0
+		}
+		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, promptTokens)
 		usage.CompletionTokens += toolCount * 7
 	}
 

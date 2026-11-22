@@ -21,7 +21,6 @@ type ResponsesUsageAccumulator struct {
 	outputText     strings.Builder
 	imageCounter   relaycommon.ImageGenerationCallCounter
 	imageCommitted bool
-	started        bool
 	finished       bool
 }
 
@@ -38,7 +37,6 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse, 
 	if event.Response != nil {
 		a.info.ObserveResponseModel(event.Response.Model)
 	}
-	a.started = true
 	ObserveResponsesOutcome(a.info, event)
 	switch event.Type {
 	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
@@ -101,11 +99,12 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 			a.usage.CompletionTokens = tokenkit.Count(a.info.GetUpstreamModelName(), output)
 		}
 	}
-	// Upstream bills the prompt as soon as it starts generating, so a stream
-	// that produced any event but no usage still owes its input tokens unless
-	// upstream reported an explicit failure.
-	billsPrompt := a.usage.CompletionTokens != 0 || (a.started && !a.info.StreamStatus.ResponseFailed())
-	if a.usage.PromptTokens == 0 && billsPrompt {
+	// Without upstream usage the estimated prompt is charged only when the
+	// stream delivered output or completed; a stream cut before any output is
+	// not charged.
+	delivered := a.usage.CompletionTokens != 0 || a.imageCounter.Count() != 0
+	completed := a.info.StreamStatus.ResponseOutcome() == string(relaycommon.ResponseOutcomeCompleted)
+	if a.usage.PromptTokens == 0 && (delivered || completed) {
 		a.usage.PromptTokens = a.info.GetEstimatePromptTokens()
 	}
 	a.usage.TotalTokens = a.usage.PromptTokens + a.usage.CompletionTokens
